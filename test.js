@@ -39,9 +39,9 @@ load("WAADSecurityProvider.js");
 // configuration needed for testing
 var configSetup = {
    authority :"https://login.windows.net",
-   tenantName : "tylerm007gmail.onmicrosoft.com",
-   clientId : "c620d05e-e515-40da-a3d2-ecfe89ee22cd",
-   clientSecret : "IUyk421BezUUprxLy1jXmx1ohhwjAOJ4XJ68p7AH1ng=",
+   tenantName : "xxxxx.onmicrosoft.com",
+   clientId : "c620d05e-e515-40da-a3d2-xxxxxx",
+   clientSecret : "xxxxx=",
    apiVersion : "api-version=2013-11-08"
 };
 
