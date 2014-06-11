@@ -15,20 +15,19 @@ var SysUtility = {
         var result = restCaller.get(url, params, settings);
         return result;
     },
-
-    isAuthenticated : function isAuthenticated(code, tenantName, clientId, clientSecret){
-		var waad = new com.espressologic.waad.authentication.WaadAuthentication(this);
-		var result = waad.isAuthenticated(code,tenantName,clientId,clientSecret);
+    getAccessToken : function getAccessToken(code, tenantName, clientId, clientSecret){
+		var waad = new com.espressologic.waad.authentication.WaadAuthentication();
+		var result = waad.getAccessToken(code,tenantName,clientId,clientSecret);
+		return result;
+	},
+	getAccessTokenFromURL : function getAccessTokenFromURL(tenantName, clientId, clientSecret,fullURL,redirectURL){
+		var waad = new com.espressologic.waad.authentication.WaadAuthentication(tenantName,clientId,clientSecret);
+		var result = waad.getAccessTokenFromURL(fullURL,redirectURL);
 		return result;
 	},
 	getRedirectURL : function getRedirectUrl(currentUri){
-		var waad = new com.espressologic.waad.authentication.WaadAuthentication(this);
+		var waad = new com.espressologic.waad.authentication.WaadAuthentication();
 		var result = waad.getRedirectUrl(currentUri);
-		return result;
-	},
-	getAccessToken : function getAccessToken(code, tenantName, clientId, clientSecret, uri){
-		var waad = new com.espressologic.waad.authentication.WaadAuthentication(this,tenantName,clientId,clientSecret);
-		var result = waad.getAccessToken(code,uri);
 		return result;
 	}
 };
@@ -54,29 +53,36 @@ waadSSO.configure(configSetup);
 
 
 var payload = {
-    token: "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsIng1dCI6ImtyaU1QZG1Cdng2OHNrVDgtbVBBQjNCc2VlQSJ9.eyJhdWQiOiJodHRwczovL2dyYXBoLndpbmRvd3MubmV0IiwiaXNzIjoiaHR0cHM6Ly9zdHMud2luZG93cy5uZXQvMjBjZTEyYTctN2NhYy00MGJiLThkZDEtNDlkMWFiMjFjMDgzLyIsImlhdCI6MTQwMjQ0NjczNiwibmJmIjoxNDAyNDQ2NzM2LCJleHAiOjE0MDI0NTA2MzYsInZlciI6IjEuMCIsInRpZCI6IjIwY2UxMmE3LTdjYWMtNDBiYi04ZGQxLTQ5ZDFhYjIxYzA4MyIsImFtciI6WyJwd2QiXSwiYWx0c2VjaWQiOiIxOmxpdmUuY29tOjAwMDM0MDAxQjFCQzc3MjMiLCJpZHAiOiJsaXZlLmNvbSIsIm9pZCI6Ijk3Y2U3MmM5LTkwNjQtNDM0OS1hNDBkLWY2YzExMjViMzczZCIsInN1YiI6IkFCcUtVbFNELVg4VndLUG5kSm1Dd2hRV0pIMXdHQmdZWGRDbERudmNnbnMiLCJlbWFpbCI6InR5bGVybTAwN0BnbWFpbC5jb20iLCJnaXZlbl9uYW1lIjoiVHlsZXIiLCJmYW1pbHlfbmFtZSI6IkJhbmQiLCJ1bmlxdWVfbmFtZSI6ImxpdmUuY29tI3R5bGVybTAwN0BnbWFpbC5jb20iLCJhcHBpZCI6ImM2MjBkMDVlLWU1MTUtNDBkYS1hM2QyLWVjZmU4OWVlMjJjZCIsImFwcGlkYWNyIjoiMSIsInNjcCI6IkRpcmVjdG9yeS5SZWFkIHVzZXJfaW1wZXJzb25hdGlvbiBVc2VyUHJvZmlsZS5SZWFkIiwiYWNyIjoiMSJ9.NBOPmz5nZIlqo4QhLcEUyvpP7eqpYw4Whxi4uECOgRw8DD3xbfd5RnoPnB3M6a0sVfFH_PLTMg_jP2Bc97it32K9Y4KO0lL6KlLJ9S2onHQTi-WoVxVxMGkuZOicwVQRETrKH_1D1V8sr-HbYK0l2rD0dzF6j0X7JAFGJ_h47HXngyGz0Rmme68c33utNN8_CMNXAYMN7_QaQNQ3DcBs0WfV7woxdN61rmPeyElBjO-lJDmQESOtPxp8OhzR-IpthBqsDQyNI38E5XGkbxNQlXp_mUAH_SFma96DpCZ5PgyTPVoZgSocPtDJFnmuusfahy3eI4MZB0ZLEM1gs-a9Aw",
-    refreshToken: "AwABAAAAvPM1KaPlrEqdFSBzjqfTGBoqWwWbbMfVuHnIblQhM82Jy7ShjBJNyt2PjlmB-00AH9i_N8qesTqzGT8DsmHVbbbwAW9ZfRuVYbz9EOaU8K4qXoklv5AMrbsEjsLb4TESsk_WB_xMfOhQSZuKqhiB9xpwpzxBbfj1wfPjtqUEdy1Tyq8Wt6gFGPZQaAn03lIx2A0705Jx3JchM63dYCBequvdUlTEMuZ7sVaqAi-DMcgiz79dvkyiVgowPpRlfIrh_1zyLh4ThhtqvO7XahuJuSQIQ34jC-jcLcWJFnRMvwgcV4StnaZmrjmfhVhqXe3yRHQDhKCrWo-8Ls3p8ptipDPvqTfQnhhalgSOpJsItwKrBXlIQ8oIJQOQt1WPj5mt9wAQLvKyqM8gAvB0k8x1hhVUo5jw6Ix5tL02Lbu-CrT0sg3OgULc3C4m41lXYmI-I1rBQj8mIJ5C5ztWj8e62iAA"
+    accessToken: "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsIng1dCI6ImtyaU1QZG1Cdng2OHNrVDgtbVBBQjNCc2VlQSJ9.eyJhdWQiOiJodHRwczovL2dyYXBoLndpbmRvd3MubmV0IiwiaXNzIjoiaHR0cHM6Ly9zdHMud2luZG93cy5uZXQvMjBjZTEyYTctN2NhYy00MGJiLThkZDEtNDlkMWFiMjFjMDgzLyIsImlhdCI6MTQwMjQ0NjczNiwibmJmIjoxNDAyNDQ2NzM2LCJleHAiOjE0MDI0NTA2MzYsInZlciI6IjEuMCIsInRpZCI6IjIwY2UxMmE3LTdjYWMtNDBiYi04ZGQxLTQ5ZDFhYjIxYzA4MyIsImFtciI6WyJwd2QiXSwiYWx0c2VjaWQiOiIxOmxpdmUuY29tOjAwMDM0MDAxQjFCQzc3MjMiLCJpZHAiOiJsaXZlLmNvbSIsIm9pZCI6Ijk3Y2U3MmM5LTkwNjQtNDM0OS1hNDBkLWY2YzExMjViMzczZCIsInN1YiI6IkFCcUtVbFNELVg4VndLUG5kSm1Dd2hRV0pIMXdHQmdZWGRDbERudmNnbnMiLCJlbWFpbCI6InR5bGVybTAwN0BnbWFpbC5jb20iLCJnaXZlbl9uYW1lIjoiVHlsZXIiLCJmYW1pbHlfbmFtZSI6IkJhbmQiLCJ1bmlxdWVfbmFtZSI6ImxpdmUuY29tI3R5bGVybTAwN0BnbWFpbC5jb20iLCJhcHBpZCI6ImM2MjBkMDVlLWU1MTUtNDBkYS1hM2QyLWVjZmU4OWVlMjJjZCIsImFwcGlkYWNyIjoiMSIsInNjcCI6IkRpcmVjdG9yeS5SZWFkIHVzZXJfaW1wZXJzb25hdGlvbiBVc2VyUHJvZmlsZS5SZWFkIiwiYWNyIjoiMSJ9.NBOPmz5nZIlqo4QhLcEUyvpP7eqpYw4Whxi4uECOgRw8DD3xbfd5RnoPnB3M6a0sVfFH_PLTMg_jP2Bc97it32K9Y4KO0lL6KlLJ9S2onHQTi-WoVxVxMGkuZOicwVQRETrKH_1D1V8sr-HbYK0l2rD0dzF6j0X7JAFGJ_h47HXngyGz0Rmme68c33utNN8_CMNXAYMN7_QaQNQ3DcBs0WfV7woxdN61rmPeyElBjO-lJDmQESOtPxp8OhzR-IpthBqsDQyNI38E5XGkbxNQlXp_mUAH_SFma96DpCZ5PgyTPVoZgSocPtDJFnmuusfahy3eI4MZB0ZLEM1gs-a9Aw",
+    refreshToken: "AwABAAAAvPM1KaPlrEqdFSBzjqfTGHjqb9dBTwUg5v5R37H6cQu-8o3w--L1pbrtGWnYnKvOkZ5O9u1cPad36W4jZbIgPGl1307sqkGf0RTCxsdd51IFTk0LmVy2dyVP38cJjxJhstcttSFbWP3Jem5PEXX0qMpxilRW38rW83cRIDF8qUqrjLl_9hY_kwncmQ732P7td-yxYfCBfOz86g3ECFAh4ESK5P7HhzQXLPUcL4ylZGoG6gW0cG-gusnGfsgWI5A43W9gvcfAVy_sRdP8y-97CmLU9RduyIbVECe7jBP7MPPccZCQ3HM3ltbsqo2eNowijD46rgL2Iw1ikv_NKojd35quj0zNnDO-rrFRIT_W4Rf74sg2Zeu9Yd6ON9H44pNoe0fQJcZQB15gWrJdw2UUhJh5KznGdKRa47F57t_5s8NKkHQnnP-PANl9W70XKI15q27sTf2DCP9csx7f9rRGaAGolMKKoT62k3NdH_PkS8SzjFe0XgF8S3zvAS4BhZT8Zw_exNWGZI-MGPwQzcpqIClFMyEfDOFk9MDJFctEmi0gAA"
 };
 
 
 var url = "http://localhost:8080/LiveBrowser/secure/aad";
+//this function uses refresh token - but the Redirect URL is better
 //out.println("------------- testing getAccessToken");
-//result = waadSSO.getAccessToken(payload.refreshToken,url);
-//out.println(result);
+//result = waadSSO.getAccessToken(payload);
+//out.println(JSON.stringify(result, null, 2));
 //out.println("-------------");
 
-var url = "http://localhost:8080/LiveBrowser/secure/aad";
+
 out.println("------------- testing getRedirectURL");
 result = waadSSO.getRedirectURL(url);
 out.println(result);
 out.println("-------------");
+payload.accessToken = result.accessToken;
 
-var url = "http://localhost:8080/LiveBrowser/secure/aad?code=AwABAAAAvPM1KaPlrEqdFSBzjqfTGMTDkSilYzBnRLYjHxT0zIQhN-2E1bRRmPWE976oe685CZbsKYDborOkKL6qJht7Jlm0nc8RTKecQIhV2dPVlVAcDEdW_JGAis9RRU9H1Usa35Fq_PJAAPqAuidCH8jTtgOYn89U49MEImcwxksBXsQTbu79qmrNPw6YRuoUtSYWhAT3IxztQkBU0HXSh6_L9y8NyQvdDmp8Oe_851Ya7IIyv7Co7wLTGdNGGuZ5LpNqrxWfDi9Lh8f_EaGCVDfEHRFZLNBmxRQd-pNhlal0v74XGw3d7HvVfgOd59K-odYRF7hCdIWtqRU1N3JnMk_SkqwBOoqTr0m_GD2Bzsw1rfZF2uO1-zeJHvO2ugHQb7z2_2FfWJz8bDvQ-nk81M9U8A5fW0ebwEraM3awAfy4Vd6g49n5NmGmAuhbwip_-obUATgu0PYqimndtk253d1uLp2kZPyYdSTF17VDcncVNyX6RIfoLfATC8STyDuTES2Kp8T8KTIjcj6i21LaFsaM8InnPsSC62RnaI569izIe6EgAA&session_state=336e332c-4ded-456d-96a5-d294b6c58fbc";
-out.println("------------- testing getLoginInfo");
-result = waadSSO.getLoginInfo(url);
+var fullURL = "http://localhost:8080/LiveBrowser/secure/aad?code=AwABAAAAvPM1KaPlrEqdFSBzjqfTGDPvkj4yz6UiB8EGe6bgV6xt6VdX5ViCaXLXQOxkAmQz3vfVSqPg17_Ly0ADiKOW265Z-TXPWBSMEwbGO9KRXeBL7ijpx2MA2bb0nOytfIczlO_4iMiF38R7xZI9j3CzergeQZ3c-1Zstp88uxOKZsqD1KD9CqYDF90wdvwkuOeKaZJGtFSwRbfiuJvrzLqsnKUavagRFGBBw-SJpyF3WDhorozTZqxvQoi3oFw8aDOuZIULVrBZjBp3BUZPGyIwMBG_nKwvuy-9iAhHkdANulT_4kUZhwXwFJL_APsml1hAdlsU_71u0Tmgl1b7RQDAIRspGYbHDcdhw9JNGgRPnbCaql-P7dlERCQedpaJKRNFgsEphZreYlm2me34XkQC-B2CPguzeLoBnNaabosBBhXf8F2sT3KqkW0GbnaMCz32ET_eUi6ghfJYz-8A7ufQtlLFrQu2EdMkTPmaF3BFdHOSm9LgfD4BHHGKIkzjqaKhzPKKoKvTDaYdZl4kfdbffEQdhEeBoaDEHajHlQu4bDUgAA&session_state=0cb13c93-3790-41c1-a464-d7fb3df8d0fc";
+var redirectURL = "http://localhost:8080/LiveBrowser/secure/aad";
+
+
+
+out.println("------------- testing getAccessTokenFromURL");
+result = waadSSO.getAccessTokenFromURL(fullURL,redirectURL);
 out.println(JSON.stringify(result, null, 2));
 //out.println("First field is " + result.fields[0].name);
 out.println("-------------");
+
 
 out.println("------------- testing getConfigInfo");
 result = waadSSO.getConfigInfo();
@@ -84,27 +90,33 @@ out.println(JSON.stringify(result, null, 2));
 //out.println("First config prop is " + result.fields[0].name);
 out.println("-------------");
 
-
-out.println("------------- testing authenticate with refreshToken in payload");
-var result = waadSSO.authenticate(payload);
-out.println(JSON.stringify(result, null, 2));
+//------------helper methods to check URL for specific values ----------------//
+out.println("------------- testing authenticate with isAuthenticated (s/b/ true) ");
+var result = waadSSO.isAuthenticated(fullURL);
+out.println(result);
 out.println("-------------");
 
 
-out.println("------------- testing authenticate with empty payload");
-badPayload = {
-   token : null,
-   refreshToken : null
-};
-
-result = waadSSO.authenticate(badPayload);
-out.println(JSON.stringify(result, null, 2));
+out.println("------------- testing authenticate with isAuthenticated (s/b/ false) ");
+var result = waadSSO.isAuthenticated('http://localhost:8080/secure/aad');
+out.println(result);
 out.println("-------------");
 
-var tenant = "tylerm007gmail.onmicrosoft.com";
+
+out.println("------------- testing authenticate with containsAuthenticationData (s/b/ true) ");
+var result = waadSSO.containsAuthenticationData(fullURL);
+out.println(result);
+out.println("-------------");
+
+out.println("------------- testing authenticate with containsAuthenticationData (s/b/ false) ");
+var result = waadSSO.containsAuthenticationData('http://localhost:8080/secure/aad');
+out.println(result);
+out.println("-------------");
+
+//-------------utility to ask waad for all available groups ------
+
 out.println("------------- testing getAllGroups");
-//result = waadSSO.getAllGroups(tenant);
-//out.println(JSON.stringify(result, null, 2));
+result = waadSSO.getAllGroups(payload);
+out.println(JSON.stringify(result, null, 2));
 out.println("-------------");
-
 

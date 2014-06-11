@@ -3,8 +3,7 @@ function waadSecurityProvider() {
 
     var result = {};
     var redirectURL = {};
-    var accessToken;
-	var refreshToken;
+
     var WAAD_GRAPHAPI_BASE_URL = "https://graph.windows.net";
     var configSetup = {
         keyLifetimeMinutes : 60,
@@ -63,27 +62,8 @@ function waadSecurityProvider() {
     };
 
     //NOTE: the function configure must be called first - this will validate the stormpath user account
-    //FUNCTION AUTHENTICATE REQUIRES PAYLOAD {username : '', password : ''}
-    result.authenticate = function authenticate(payload) {
-        var RESERVED_FIELDS_HREF =  [ 'href', 'createdAt', 'modifiedAt'];
-
-        //helper function to return an named value pairs of customData (exlude reserved fields)
-        var parseCustomData =  function parseCustomData(result, stringHREF) {
-            for (var id in stringHREF) {
-                if (!stringHREF.hasOwnProperty(id)) {
-                    continue;
-                }
-                if (RESERVED_FIELDS_HREF.indexOf(id) != -1) {
-                    continue;
-                }
-                if (stringHREF.hasOwnProperty('customData')) {
-                    var customdata = stringHREF[id];
-                    for (var key in customdata) {
-                        result[key] = customdata[key];
-                    }
-                }
-            }
-        };
+    //FUNCTION AUTHENTICATE REQUIRES PAYLOAD {token : '', refershToken : ''}
+    result.getAccessToken = function getAccessToken(payload) {
 
         var roles = [];
         var errorMsg = null;
@@ -91,62 +71,46 @@ function waadSecurityProvider() {
         var forgotPasswordURL = null;
         var customDataHREF = {};
         var params = null;
-
-
-        var graphURL = WAAD_GRAPHAPI_BASE_URL + '/' + configSetup.tenant + '/';
-		var upn = "";
+		var accessToken = null;
+		var refreshToken = null;
+		var identityProvider;
         try {
-			out.println(JSON.stringify(payload.refreshToken, null, 2));
-			out.println(JSON.stringify(configSetup, null, 2));
+
             //POST this JSON request to determine if username and password account is valid
-            var accessToken = SysUtility.isAuthenticated(payload.refreshToken,configSetup.tenantName,configSetup.clientId,configSetup.clientSecret);
+            var accessToken = SysUtility.getAccessToken(payload.refreshToken,configSetup.tenantName,configSetup.clientId,configSetup.clientSecret);
 
             var accessTokenJSON = JSON.parse(accessToken);
-            out.println(JSON.stringify(accessTokenJSON, null, 2));
-            /* this is the object values returned if authenticated*/
-             if (accessTokenJSON.hasOwnProperty('refreshToken')) {
-             		var accessTokenType = accessTokenJSON.accessTokenType;
+            //out.println(JSON.stringify(accessTokenJSON, null, 2));
+            /* this is the object values returned if authenticated not used except access token - */
+             if (accessTokenJSON.hasOwnProperty('accessToken')) {
 			        accessToken =accessTokenJSON.accessToken;
 			        refreshToken = accessTokenJSON.refreshToken;
 			        var expiresOn = accessTokenJSON.expiresOn;
 			        var userInfo = accessTokenJSON.userInfo;
-        			var isMultipleResourceRefreshToken = accessTokenJSON.isMultipleResourceRefreshToken;
-
         			var userId = userInfo.userId;
-					var givenName = userInfo.givenName;
-					var familyName = userInfo.familyName;
-					var identityProvider = userInfo.identityProvider;
-        			var isDisplayable = userInfo.isUserIdDisplayable;
-        			upn = identityProvider;
+					identityProvider = userInfo.identityProvider;
+					if(identityProvider != null){
+						//getGroupForUser(identityProvider)
+					}
 			} else {
-
-				if (accessTokenJSON.hasOwnProperty('responseCode')) {
-					 errorMsg = "message: " + accessTokenJSON.responseMessage;
+				if (accessTokenJSON.hasOwnProperty('error_description')) {
+					 errorMsg = "message: " + accessTokenJSON.error_description;
 				}
 			}
-            var token = '';
-            var userPrincipalName = "";
-            var groupsURL = WAAD_GRAPHAPI_BASE_URL + '/' + configSetup.tenantName + '/users/'+upn+'/memberOf?'+configSetup.apiVersion;
-       		var settings = createSettings(accessToken);
-		   	var groupsResponse = SysUtility.restGet(groupsURL, params, settings);
-		   	var groups = JSON.parse(groupsResponse);
-
-		   	for (var i = 0; i < groups.items.length; i++) {
-				roles.push(groups.items[i].name);
-		   	}
 
         }catch (e) {
-            errorMsg = e.message;
+			errorMsg = e.message;
         }
 
         var autResponse = {
             errorMessage: errorMsg,
             roleNames: roles,
-            userIdentifier: upn,
+            userIdentifier: identityProvider,
             keyExpiration: new Date(+new Date() + (+configSetup.keyLifetimeMinutes) * 60 * 1000),
             resetPasswordURL: resetPasswordURL,
             forgotPasswordURL: forgotPasswordURL,
             userData: customDataHREF,
+            refreshToken : refreshToken,
             lastLogin : {
                 datetime: null,
                 ipAddress : null
@@ -154,52 +118,130 @@ function waadSecurityProvider() {
         };
         return autResponse;
     };
+
+    //FUNCTION getAccessTokenFromURL - use the URL returned from WAAD to get the access token we need to find group info
+    result.getAccessTokenFromURL = function getAccessTokenFromURL(fullURL,redirectURL){
+	var roles = [];
+	var errorMsg = null;
+	var resetPasswordURL = null;
+	var forgotPasswordURL = null;
+	var customDataHREF = {};
+	var identityProvider;
+	var userId;
+	var params = null;
+	var accessToken;
+	try {
+		var result = SysUtility.getAccessTokenFromURL(configSetup.tenantName,configSetup.clientId,configSetup.clientSecret,fullURL,redirectURL);
+		var accessTokenJSON = JSON.parse(result);
+        if (accessTokenJSON.hasOwnProperty('accessToken')) {
+			accessToken =accessTokenJSON.accessToken;
+			var refreshToken = accessTokenJSON.refreshToken;
+			var expiresOn = accessTokenJSON.expiresOn;
+			var userInfo = accessTokenJSON.userInfo;
+			userId = userInfo.userId;
+			identityProvider = userInfo.identityProvider;
+			if(userId != null){
+				var groupsURL = WAAD_GRAPHAPI_BASE_URL + '/' + configSetup.tenantName + '/users/'+userId+'/memberOf?'+configSetup.apiVersion;
+				out.println(groupsURL);
+				//var settings = createSettings(accessToken);
+				var settings = {
+		             headers: { 'Authorization' : accessToken }
+        		};
+				var groupsResponse = SysUtility.restGet(groupsURL, params, settings);
+				var groups = JSON.parse(groupsResponse);
+				out.println(groups);
+				if(groups != null && groups.hasOwnProperty('values')){
+					for (var i = 0; i < groups.values.length; i++) {
+						roles.push(groups.values[i].displayName);
+					}
+				}
+		out.println(roles);
+			}
+		} else {
+			if (accessTokenJSON.hasOwnProperty('error_description')) {
+				 errorMsg = "message: " + accessTokenJSON.error_description;
+			}
+		}
+	 }catch (e) {
+		errorMsg = e.message;
+	}
+        var autResponse = {
+			errorMessage: errorMsg,
+			roleNames: roles,
+			userIdentifier: userId,
+			keyExpiration: new Date(+new Date() + (+configSetup.keyLifetimeMinutes) * 60 * 1000),
+			resetPasswordURL: resetPasswordURL,
+			forgotPasswordURL: forgotPasswordURL,
+			userData: customDataHREF,
+			accessToken: accessToken,
+			lastLogin : {
+				datetime: null,
+				ipAddress : null
+			}
+		};
+        return autResponse;
+	};
+
  	//FUNCTION getRedirectURL to get the rediret URL from the currentUri
     result.getRedirectURL = function getRedirectURL(currentUri){
 		return redirectURL = SysUtility.getRedirectURL(currentUri);
 	};
-	//FUNCTION getAccessToken using code
-	result.getAccessToken = function getAccessToken(code, uri){
-		var accessToken = SysUtility.getAccessToken(payload.refreshToken,configSetup.tenantName,configSetup.clientId,configSetup.clientSecret,uri);
 
-		var accessTokenJSON = JSON.parse(accessToken);
-		out.println(JSON.stringify(accessTokenJSON, null, 2));
-		/* this is the object values returned if authenticated*/
-		 if (accessTokenJSON.hasOwnProperty('refreshToken')) {
-				var accessTokenType = accessTokenJSON.accessTokenType;
-				accessToken =accessTokenJSON.accessToken;
-				refreshToken = accessTokenJSON.refreshToken;
-				var expiresOn = accessTokenJSON.expiresOn;
-				var userInfo = accessTokenJSON.userInfo;
-				var isMultipleResourceRefreshToken = accessTokenJSON.isMultipleResourceRefreshToken;
-
-				var userId = userInfo.userId;
-				var givenName = userInfo.givenName;
-				var familyName = userInfo.familyName;
-				var identityProvider = userInfo.identityProvider;
-				var isDisplayable = userInfo.isUserIdDisplayable;
-				upn = identityProvider;
-				out.println(upn);
+	result.isAuthenticated = function isAuthenticated(url){
+		var result = false;
+		if( url != null && (url.indexOf("code") > -1 || url.indexOf("id_token") > -1)){
+			result = true;
 		}
-		return accessTokenJSON;
+		return result;
+	};
+
+	result.containsAuthenticationData = function containsAuthenticationData(url){
+		var result = false;
+		if( url != null && url.indexOf("error") <= -1 && (url.indexOf("code") > -1 || url.indexOf("id_token") > -1)){
+			result = true;
+		}
+		return result;
+	};
+	//FUNCTION getGroupForUser
+	result.getGroupForUser = function getGroupForUser(identityProvider){
+
+		var token = '';
+		var userPrincipalName = "";
+		var groupsURL = WAAD_GRAPHAPI_BASE_URL + '/' + configSetup.tenantName + '/users/'+identityProvider+'/memberOf?'+configSetup.apiVersion;
+		out.println(groupsURL);
+		var settings = {
+			headers: { 'Authorization' : payload.accessToken }
+        };
+		var groupsResponse = SysUtility.restGet(groupsURL, params, settings);
+		var groups = JSON.parse(groupsResponse);
+		out.println(groups);
+		if(groups != null && groups.hasOwnProperty('values')){
+			for (var i = 0; i < groups.values.length; i++) {
+				roles.push(groups.values[i].displayName);
+			}
+		}
+		out.println(roles);
+
 	};
     //FUNCTION getAllGroups is used to map all available groups for existing application - DO NOT CHANGE
-    result.getAllGroups = function getAllGroups(accessToken,userPrincipal) {
+    result.getAllGroups = function getAllGroups(payload) {
         var roles = [];
         var errorMsg = null;
-        var groupsURL = WAAD_GRAPHAPI_BASE_URL + '/' + configSetup.tenantName + '/groups/'+userPrincipal+'/memberOf?'+configSetup.apiVersion;
+        var groupsURL = WAAD_GRAPHAPI_BASE_URL + '/' + configSetup.tenantName + '/groups/?'+configSetup.apiVersion;
         var params = null;
-        var settings = createSettings(accessToken);
+        var settings = {
+		             headers: { 'Authorization' : payload.accessToken }
+        		};
 
         try {
             var groupsResponse = SysUtility.restGet(groupsURL, params, settings);
             var groups = JSON.parse(groupsResponse);
-
-            for (var i = 0; i < groups.items.length; i++) {
-                if ('ENABLED' === groups.items[i].status) {
-                    roles.push(groups.items[i].name);
-                }
-            }
+			out.println(JSON.stringify(groups, null, 2));
+			if(groups != null && groups.hasOwnProperty('values') ){
+				for (var i = 0; i < groups.values.length; i++) {
+					roles.push(groups.values[i].displayName);
+				}
+			}
         }
         catch(e) {
             errorMsg = e.message;
@@ -221,7 +263,8 @@ function waadSecurityProvider() {
 			var urlArray = url.split("?");
 			var codePart = urlArray[1].split("&");
 			//if(url contains accessToken then redirectURL will be extracted and returned){
-			var accessToken = codePart[0];//extract code= from user and remove the trailing stuff
+			var codeToken = codePart[0];//extract code= from user and remove the trailing stuff
+			var accessToken = (codeToken.split("="))[1]
 			var redirectURL = urlArray[0];
 			autoLogin = true;
 		}

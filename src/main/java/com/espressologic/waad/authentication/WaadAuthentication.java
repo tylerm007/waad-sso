@@ -11,46 +11,54 @@ import java.util.concurrent.Future;
 
 import javax.naming.ServiceUnavailableException;
 
-import org.mozilla.javascript.*;
-
 import com.microsoft.aad.adal4j.AuthenticationContext;
 import com.microsoft.aad.adal4j.AuthenticationResult;
 import com.microsoft.aad.adal4j.ClientCredential;
+import com.microsoft.aad.adal4j.UserInfo;
 import com.nimbusds.oauth2.sdk.AuthorizationCode;
+import com.nimbusds.openid.connect.sdk.AuthenticationResponseParser;
+import com.nimbusds.openid.connect.sdk.AuthenticationSuccessResponse;
 
 public class WaadAuthentication {
 
-	private Scriptable start;
 	private String clientId = "";
 	private String clientSecret = "";
 	private String tenant = "";
 	private String authority = "https://login.windows.net/";
-	
-	public WaadAuthentication(Scriptable start) {
-        this.start = start;
-    }
 
-	public WaadAuthentication(Scriptable start,String tenant, String clientId, String clientSecret) {
-		this( start);
-        this.tenant = tenant;
+	public WaadAuthentication() {
+
+	}
+
+	public WaadAuthentication(String tenant, String clientId, String clientSecret) {
+		this.tenant = tenant;
 		this.clientId = clientId;
 		this.clientSecret = clientSecret;
-    }
-	public String isAuthenticated(String refreshToken, String tenant, String clientId, String clientSecret) throws Throwable {
-		AuthenticationResult result = authenticated(refreshToken, tenant, clientId, clientSecret);
-		//convert this to a JSON array
-		return result.getAccessToken();
 	}
-	private AuthenticationResult authenticated(String refreshToken, String tenant, String clientId, String clientSecret)
+
+	public String getAccessTokenFromURL(String fullUrl, String currentUri) throws Throwable {
+		AuthenticationSuccessResponse oidcResponse = (AuthenticationSuccessResponse) AuthenticationResponseParser.parse(new URI(
+				fullUrl));
+		AuthenticationResult result = getAccessToken(oidcResponse.getAuthorizationCode(), currentUri);
+		return convertToJson(result);
+	}
+
+	public String getAccessToken(String refreshToken, String tenant, String clientId, String clientSecret) throws Throwable {
+		AuthenticationResult result = getAccessTokenResult(refreshToken, tenant, clientId, clientSecret);
+		// convert this to a JSON array
+		return convertToJson(result);
+	}
+
+	public AuthenticationResult getAccessTokenResult(String refreshToken, String tenant, String clientId, String clientSecret)
 			throws Throwable {
 		this.tenant = tenant;
 		this.clientId = clientId;
 		this.clientSecret = clientSecret;
-		if (refreshToken != null && refreshToken.length() > 20) {
-			return getAccessTokenFromRefreshToken(refreshToken, null);
-		} else {
-			return this.getAccessTokenFromClientCredentials();
-		}
+		// if (refreshToken != null && refreshToken.length() > 20) {
+		// return getAccessTokenFromRefreshToken(refreshToken, null);
+		// } else {
+		return this.getAccessTokenFromClientCredentials();
+		// }
 	}
 
 	private AuthenticationResult getAccessTokenFromClientCredentials() throws Throwable {
@@ -98,8 +106,8 @@ public class WaadAuthentication {
 
 	}
 
-	public AuthenticationResult getAccessToken(String authCode, String currentUri) throws Throwable {
-		//String authCode = authorizationCode.getValue();
+	public AuthenticationResult getAccessToken(AuthorizationCode authorizationCode, String currentUri) throws Throwable {
+		String authCode = authorizationCode.getValue();
 		ClientCredential credential = new ClientCredential(clientId, clientSecret);
 		AuthenticationContext context = null;
 		AuthenticationResult result = null;
@@ -122,116 +130,104 @@ public class WaadAuthentication {
 		return result;
 	}
 
-	
-
 	public String getRedirectUrl(String currentUri) throws UnsupportedEncodingException {
 		String redirectUrl = authority + this.tenant + "/oauth2/authorize?response_type=code&redirect_uri="
 				+ URLEncoder.encode(currentUri, "UTF-8") + "&client_id=" + clientId + "&resource=https%3a%2f%2fgraph.windows.net"
 				+ "&nonce=" + UUID.randomUUID() + "&site_id=500879";
 		return redirectUrl;
 	}
-	 private String convertToJson(NativeObject obj) {
-	        StringBuffer sb = new StringBuffer();
-	        convertToJson(obj, sb);
-	        return sb.toString();
-	    }
+	enum AuthResultEnum {
+		accessTokenType,expiresOn,accessToken,refreshToken,isMultipleResourceRefreshToken
+	}
 
-	    private void convertObjectToJson(NativeObject obj, StringBuffer sb) {
-	        sb.append("{");
-	        Object[] allIds = obj.getAllIds();
-	        int numAtts = 0;
-	        for (Object key : allIds) {
-	            String name = key.toString();
-	            if (numAtts > 0)
-	                sb.append(",");
-	            sb.append("\"" + name + "\":");
-	            Object value = obj.get(name, (Scriptable) start);
-	            convertToJson(value, sb);
-	            numAtts++;
-	        }
-	        sb.append("}");
-	    }
+	private String convertToJson(AuthenticationResult result) {
+		StringBuffer sb = new StringBuffer();
+		if(result != null){
+			sb.append("{\n");
+			appendValues("refreshToken",result.getRefreshToken(), sb,true);
+			sb.append(",");
+			sb.append("\n");
+			appendValues("accessToken",result.getAccessToken(), sb,true);
+			sb.append(",");
+			sb.append("\n");
+			appendValues("isMultipleResourceRefreshToken",String.valueOf(result.isMultipleResourceRefreshToken()), sb,false);
+			sb.append(",");
+			sb.append("\n");
+			appendValues("expiresOn",result.getExpiresOn(), sb,false);
+			sb.append(",");
+			sb.append("\n");
+			sb.append("\"userInfo\" : ");
+			convertToJson(result.getUserInfo(),sb);
+			sb.append("\n}\n");
+		} else { 
+			sb.append("{ ERROR : \"" + result.toString() +"\"}");
+		
+		}
+		return sb.toString();
+	}
+	
+	
+	private void convertToJson(UserInfo result,StringBuffer sb) {
+		if(result != null){
+		sb.append("{\n");
+			appendValues("userId",String.valueOf(result.getUserId()), sb,true);
+			sb.append(",");
+			sb.append("\n");
+			
+			appendValues("givenName",result.getGivenName(), sb,true);
+			sb.append(",");
+			sb.append("\n");
+		
+			appendValues("familyName",result.getFamilyName(), sb,true);
+			sb.append(",");
+			sb.append("\n");
+			
+			appendValues("identityProvider",result.getIdentityProvider(), sb,true);		
+			sb.append("\n");
+			sb.append("\n}\n");
+		} else {
+			sb.append("{}");
+		}
+	}
+	private void appendValues(String fn,Object value , StringBuffer sb,boolean addQuote) {
+		sb.append("\n");
+		sb.append("  ");
+		sb.append("\"");
+		sb.append(fn);
+		sb.append("\"");
+		sb.append(":");
+		if(addQuote) sb.append("\"");
+		sb.append(value);
+		if(addQuote)sb.append("\"");
+		
+	}
 
-	    private void convertToJson(Object obj, StringBuffer sb) {
-	        if (obj == null) {
-	            sb.append("null");
-	            return;
-	        }
-	        if (obj instanceof NativeArray) {
-	            sb.append("[");
-	            NativeArray a = (NativeArray) obj;
-	            long l = a.getLength();
-	            for (int i = 0; i < l; i++) {
-	                if (i > 0)
-	                    sb.append(",");
-	                Object o = a.get(i, start);
-	                convertToJson(o, sb);
-	            }
-	            sb.append("]");
-	        } else if (obj instanceof NativeObject) {
-	            convertObjectToJson((NativeObject) obj, sb);
-	        } else {
-	            String valStr = objectToString(obj);
-	            sb.append(valStr);
-	        }
-	    }
-
-	    private static String objectToString(Object o) {
-	        if (o == null)
-	            return "null";
-
-	        if (o instanceof NativeJavaObject)
-	            o = ((NativeJavaObject) o).unwrap();
-
-	        if (o instanceof ConsString) {
-	            o = o.toString();
-	        }
-
-	        if (o instanceof String) {
-	            String s = (String) o;
-	            s = s.replace("\\", "\\\\");
-	            s = s.replace("\"", "\\\"");
-	            s = s.replace("\n", "\\n");
-	            s = s.replace("\t", "\\t");
-	            s = s.replace("\r", "\\n");
-
-	            return "\"" + s + "\"";
-	        }
-
-	        if (o instanceof Boolean) {
-	            Boolean b = (Boolean) o;
-	            return b.toString();
-	        }
-
-	        if (o instanceof Number) {
-	            Number n = (Number) o;
-	            return n.toString();
-	        }
-
-	        if (o instanceof Undefined)
-	            return "null";
-
-	        throw new RuntimeException("Object from JavaScript has unknown type: " + o.getClass());
-	    }
-
-	public static void main(String[] ars){
+	
+	public static void main(String[] ars) {
 		String tenantName = "tylerm007gmail.onmicrosoft.com";
 		String clientId = "c620d05e-e515-40da-a3d2-ecfe89ee22cd";
 		String clientSecret = "IUyk421BezUUprxLy1jXmx1ohhwjAOJ4XJ68p7AH1ng=";
-		 String code = "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsIng1dCI6ImtyaU1QZG1Cdng2OHNrVDgtbVBBQjNCc2VlQSJ9.eyJhdWQiOiJodHRwczovL2dyYXBoLndpbmRvd3MubmV0IiwiaXNzIjoiaHR0cHM6Ly9zdHMud2luZG93cy5uZXQvMjBjZTEyYTctN2NhYy00MGJiLThkZDEtNDlkMWFiMjFjMDgzLyIsImlhdCI6MTQwMjQ0NjczNiwibmJmIjoxNDAyNDQ2NzM2LCJleHAiOjE0MDI0NTA2MzYsInZlciI6IjEuMCIsInRpZCI6IjIwY2UxMmE3LTdjYWMtNDBiYi04ZGQxLTQ5ZDFhYjIxYzA4MyIsImFtciI6WyJwd2QiXSwiYWx0c2VjaWQiOiIxOmxpdmUuY29tOjAwMDM0MDAxQjFCQzc3MjMiLCJpZHAiOiJsaXZlLmNvbSIsIm9pZCI6Ijk3Y2U3MmM5LTkwNjQtNDM0OS1hNDBkLWY2YzExMjViMzczZCIsInN1YiI6IkFCcUtVbFNELVg4VndLUG5kSm1Dd2hRV0pIMXdHQmdZWGRDbERudmNnbnMiLCJlbWFpbCI6InR5bGVybTAwN0BnbWFpbC5jb20iLCJnaXZlbl9uYW1lIjoiVHlsZXIiLCJmYW1pbHlfbmFtZSI6IkJhbmQiLCJ1bmlxdWVfbmFtZSI6ImxpdmUuY29tI3R5bGVybTAwN0BnbWFpbC5jb20iLCJhcHBpZCI6ImM2MjBkMDVlLWU1MTUtNDBkYS1hM2QyLWVjZmU4OWVlMjJjZCIsImFwcGlkYWNyIjoiMSIsInNjcCI6IkRpcmVjdG9yeS5SZWFkIHVzZXJfaW1wZXJzb25hdGlvbiBVc2VyUHJvZmlsZS5SZWFkIiwiYWNyIjoiMSJ9.NBOPmz5nZIlqo4QhLcEUyvpP7eqpYw4Whxi4uECOgRw8DD3xbfd5RnoPnB3M6a0sVfFH_PLTMg_jP2Bc97it32K9Y4KO0lL6KlLJ9S2onHQTi-WoVxVxMGkuZOicwVQRETrKH_1D1V8sr-HbYK0l2rD0dzF6j0X7JAFGJ_h47HXngyGz0Rmme68c33utNN8_CMNXAYMN7_QaQNQ3DcBs0WfV7woxdN61rmPeyElBjO-lJDmQESOtPxp8OhzR-IpthBqsDQyNI38E5XGkbxNQlXp_mUAH_SFma96DpCZ5PgyTPVoZgSocPtDJFnmuusfahy3eI4MZB0ZLEM1gs-a9Aw";
-		 String refreshToken = null;//"AwABAAAAvPM1KaPlrEqdFSBzjqfTGBoqWwWbbMfVuHnIblQhM82Jy7ShjBJNyt2PjlmB-00AH9i_N8qesTqzGT8DsmHVbbbwAW9ZfRuVYbz9EOaU8K4qXoklv5AMrbsEjsLb4TESsk_WB_xMfOhQSZuKqhiB9xpwpzxBbfj1wfPjtqUEdy1Tyq8Wt6gFGPZQaAn03lIx2A0705Jx3JchM63dYCBequvdUlTEMuZ7sVaqAi-DMcgiz79dvkyiVgowPpRlfIrh_1zyLh4ThhtqvO7XahuJuSQIQ34jC-jcLcWJFnRMvwgcV4StnaZmrjmfhVhqXe3yRHQDhKCrWo-8Ls3p8ptipDPvqTfQnhhalgSOpJsItwKrBXlIQ8oIJQOQt1WPj5mt9wAQLvKyqM8gAvB0k8x1hhVUo5jw6Ix5tL02Lbu-CrT0sg3OgULc3C4m41lXYmI-I1rBQj8mIJ5C5ztWj8e62iAA";
-		 WaadAuthentication waad = new WaadAuthentication(null);
-		 String result = null;
-		 AuthorizationCode authorizationCode = new AuthorizationCode(code);
-		 try {
-			result = waad.isAuthenticated(refreshToken, tenantName, clientId, clientSecret);
-			System.out.println(result);
-			//result = waad.getAccessToken(authorizationCode, "http://locahost:8080/LiveBrowser");
+		String code = "eyJ0eXAiOiJKV1QiLCJhbGciOiJSUzI1NiIsIng1dCI6ImtyaU1QZG1Cdng2OHNrVDgtbVBBQjNCc2VlQSJ9.eyJhdWQiOiJodHRwczovL2dyYXBoLndpbmRvd3MubmV0IiwiaXNzIjoiaHR0cHM6Ly9zdHMud2luZG93cy5uZXQvMjBjZTEyYTctN2NhYy00MGJiLThkZDEtNDlkMWFiMjFjMDgzLyIsImlhdCI6MTQwMjQ5Mjk3NSwibmJmIjoxNDAyNDkyOTc1LCJleHAiOjE0MDI0OTY4NzUsInZlciI6IjEuMCIsInRpZCI6IjIwY2UxMmE3LTdjYWMtNDBiYi04ZGQxLTQ5ZDFhYjIxYzA4MyIsIm9pZCI6IjdiOThiYmVmLWI0OWQtNGUzYi1hNmFhLTNkNjYwMzU3NzM2MyIsInN1YiI6IjdiOThiYmVmLWI0OWQtNGUzYi1hNmFhLTNkNjYwMzU3NzM2MyIsImlkcCI6Imh0dHBzOi8vc3RzLndpbmRvd3MubmV0LzIwY2UxMmE3LTdjYWMtNDBiYi04ZGQxLTQ5ZDFhYjIxYzA4My8iLCJhcHBpZCI6ImM2MjBkMDVlLWU1MTUtNDBkYS1hM2QyLWVjZmU4OWVlMjJjZCIsImFwcGlkYWNyIjoiMSJ9.diIzgxWVfWEY-CDczLr7wbTjy180azl8b84f0rGh52Q3639eVhsxLsZyplXBEctNgXgwgkQbYVBsSPIPwaKPvGt82npla2Sfl65MRx6FdsowkIipi5K8mkbiRv6TacXP5ntHIjf1VWS_Qi6-C5oKh-m7a2OZox6LTQUm9xyVVouPLx2iA916GRiQhQBX3CAIEEDN8GE6WDHIRUlb2jTfBMH2mQOTQHKxGukvGXT6nWvVJzKp2NGuOVrMiR59zbEdO7ODJQFhWH-nHKkmMTuPY5nLmmANvRxZmVKBNeSoOGGuD92F2qybs_c7C2j05Vrj-K-2l2XEn4CF2jG9StYX7Q";
+		String refreshToken = null;// "AwABAAAAvPM1KaPlrEqdFSBzjqfTGFHL5YXlCIO_-Tti1hedJW2qIGogjfBlLdZ_CPlD8fJf7xO6iu3i4rJ3aQOTduEYX_ycGRCWyZvn1mOq6lkZPEOTI5zkxKdcGESctDZIb47VGdTsJPrh0EXGqmhngbAaHP8lIfPTiuM1ia7IRmzAD5HAyuizKVW_8S2UdJw9UprlUAGzl79ylnpabgeqLJ8AUhb03F1zU0TNup58Wpz6QywM9qtWKntDJ-RnU0NHgwF1_CMMX6b3zxTP8WUVV19GxDS7YvVITS0qTtLk5uC5nvHgoMN8VPj9ILVkLHppebEZFY467yUqvJ6FL4YrbwP3MR0QMW28OUBD2tunSyqlMx-PjYpuAjZFrb2zCK4E1zG3ykVpBi3JDbLChEzGu0fYeXsdeg7A8F58-5-UQkVcWn9zSEOid2imf9lofSlOsZEmbx85z86dQQqWmkvY8FjYBG4tHTD8HI_ccMqO-kQvBPKu74DfRhQlwakUA068L6Aljmuz5clPH6KjCtGahKd89AHllrKXCNKNAt-KKjsEgT4gAA";
+		WaadAuthentication waad = new WaadAuthentication(tenantName, clientId, clientSecret);
+		String fullURL = "http://localhost:8080/LiveBrowser/secure/aad?code=AwABAAAAvPM1KaPlrEqdFSBzjqfTGCN4Yz3ODPo9-sWZ4RTqgIQ9t2-aaMQ4c4kunDqWq5XhLCXPMibgBZHd18utbIj3PAgcvvM2CAPcn3Z7eL5ndA68Tj_Fd-uVyOHMgfXRLUBLkbslrbXnVE_xk2mJV9TZEb4PVJGmNL0C7lP2djqGz-x-15pw60T6ZWpLDXb9-SxIYuHWo5aEbBcHZ_O9-z_JY6NMaDvFtlyudPqA9Rg-qCHHHlnJLDyEGoVpq1dqD9Yi4CLS9vhUn5HoTT7yn-hV2sdJY2_t2A1N6g9elacPaXOSCogRNfy08F2ets_B67H3dpynRwzGsql7LBEoxvJBUP2cwFvEn3q1osj5Hy-NwAa5X1jxCuSgV_rDZmXhmFPuSMRTJj6KqCvcc-Cfjdu1BXx_ACqvXFFAgBxHug5YuBKDGIpEk_zxFkiIT19Am_yWDz64hXpSpgLWsKBCfUFoV7DEd66jFFcI83r6ilaAdZr17oYGrMCBUPj4m9dGvtfahBwhq3m9OfYhpTHnUGELb3c9K_dJQ7-TyYXHj8YcF_cgAA&session_state=997e7b65-cf8f-49df-abba-e651563ec7db";
+		String redirectURL = "http://localhost:8080/LiveBrowser/secure/aad";
+
+		String result = null;
+		AuthorizationCode authorizationCode = new AuthorizationCode(code);
+		try {
+			result = waad.getAccessTokenFromURL(fullURL, redirectURL);
+			System.out.println("getAccessTokenFromURL: "+result);
+			result = waad.getAccessToken(refreshToken,tenantName, clientId, clientSecret);
+			System.out.println("getAccessToken: "+ result);
+			
+			// result = waad.getAccessToken(authorizationCode,
+			// "http://locahost:8080/LiveBrowser");
 			System.out.println(waad.getRedirectUrl("http://localhost:8080/LiveBrowser/secure/aad"));
 		} catch (Throwable e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
-		 System.out.println("done");
+		System.out.println("done");
 	}
 }
