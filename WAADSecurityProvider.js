@@ -3,7 +3,7 @@ function waadSecurityProvider() {
 
     var result = {};
     var redirectURL = {};
-
+	out = java.lang.System.out;
     var WAAD_GRAPHAPI_BASE_URL = "https://graph.windows.net";
     var configSetup = {
         keyLifetimeMinutes : 60,
@@ -26,43 +26,17 @@ function waadSecurityProvider() {
    		configSetup.apiVersion = myConfig.apiVersion || "api-version=2013-11-08"
     };
 
-
-    // the btoa function is not available in Rhino - this is a helper function.
-    var encodeBase64 =  function encodeBase64(input) {
-        var map = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/=";
-
-        var output = "", a, b, c, d, e, f, g, i = 0;
-
-        while (i < input.length) {
-            a = input.charCodeAt(i++);
-            b = input.charCodeAt(i++);
-            c = input.charCodeAt(i++);
-            d = a >> 2;
-            e = ((a & 3) << 4) | (b >> 4);
-            f = ((b & 15) << 2) | (c >> 6);
-            g = c & 63;
-
-            if (isNaN(b)) f = g = 64;
-            else if (isNaN(c)) g = 64;
-
-            output += map.charAt(d) + map.charAt(e) + map.charAt(f) + map.charAt(g);
-        }
-
-         return output;
-    };
-
     // internal helper function to encode header values
     var createSettings = function (accesToken) {
-        //var auth = 'Basic ' + encodeBase64(configSetup.clientId + ':' + configSetup.clientSecret);
         var params = null;
         var settings = {
-             headers: { 'bearer' : accesToken }
+             headers: { 'Authorization' : accesToken }
         };
         return settings;
     };
 
     //NOTE: the function configure must be called first - this will validate the stormpath user account
-    //FUNCTION AUTHENTICATE REQUIRES PAYLOAD {token : '', refershToken : ''}
+    //FUNCTION AUTHENTICATE REQUIRES PAYLOAD {accessToken : '', refershToken : ''}
     result.getAccessToken = function getAccessToken(payload) {
 
         var roles = [];
@@ -73,13 +47,14 @@ function waadSecurityProvider() {
         var params = null;
 		var accessToken = null;
 		var refreshToken = null;
+		var userId = null;
 		var identityProvider;
         try {
 
             //POST this JSON request to determine if username and password account is valid
-            var accessToken = SysUtility.getAccessToken(payload.refreshToken,configSetup.tenantName,configSetup.clientId,configSetup.clientSecret);
+            var accessTokenResult = SysUtility.getAccessToken(payload.refreshToken,configSetup.tenantName,configSetup.clientId,configSetup.clientSecret);
 
-            var accessTokenJSON = JSON.parse(accessToken);
+            var accessTokenJSON = JSON.parse(accessTokenResult);
             //out.println(JSON.stringify(accessTokenJSON, null, 2));
             /* this is the object values returned if authenticated not used except access token - */
              if (accessTokenJSON.hasOwnProperty('accessToken')) {
@@ -87,10 +62,10 @@ function waadSecurityProvider() {
 			        refreshToken = accessTokenJSON.refreshToken;
 			        var expiresOn = accessTokenJSON.expiresOn;
 			        var userInfo = accessTokenJSON.userInfo;
-        			var userId = userInfo.userId;
+        			userId = userInfo.userId;
 					identityProvider = userInfo.identityProvider;
-					if(identityProvider != null){
-						//getGroupForUser(identityProvider)
+					if(userId != null){
+						roles = getGroupForUser(userId);
 					}
 			} else {
 				if (accessTokenJSON.hasOwnProperty('error_description')) {
@@ -105,11 +80,12 @@ function waadSecurityProvider() {
         var autResponse = {
             errorMessage: errorMsg,
             roleNames: roles,
-            userIdentifier: identityProvider,
+            userIdentifier: userId,
             keyExpiration: new Date(+new Date() + (+configSetup.keyLifetimeMinutes) * 60 * 1000),
             resetPasswordURL: resetPasswordURL,
             forgotPasswordURL: forgotPasswordURL,
             userData: customDataHREF,
+            accessToken : accessToken,
             refreshToken : refreshToken,
             lastLogin : {
                 datetime: null,
@@ -129,33 +105,34 @@ function waadSecurityProvider() {
 	var identityProvider;
 	var userId;
 	var params = null;
-	var accessToken;
+	var accessToken = null;
+	var refreshToken = null;
 	try {
 		var result = SysUtility.getAccessTokenFromURL(configSetup.tenantName,configSetup.clientId,configSetup.clientSecret,fullURL,redirectURL);
 		var accessTokenJSON = JSON.parse(result);
         if (accessTokenJSON.hasOwnProperty('accessToken')) {
 			accessToken =accessTokenJSON.accessToken;
-			var refreshToken = accessTokenJSON.refreshToken;
+			refreshToken = accessTokenJSON.refreshToken;
 			var expiresOn = accessTokenJSON.expiresOn;
 			var userInfo = accessTokenJSON.userInfo;
 			userId = userInfo.userId;
 			identityProvider = userInfo.identityProvider;
 			if(userId != null){
+				//note: userId does not work - need to get ObjectId - but this does not come back in call - need another JSON call.
 				var groupsURL = WAAD_GRAPHAPI_BASE_URL + '/' + configSetup.tenantName + '/users/'+userId+'/memberOf?'+configSetup.apiVersion;
-				out.println(groupsURL);
+
 				//var settings = createSettings(accessToken);
 				var settings = {
 		             headers: { 'Authorization' : accessToken }
         		};
 				var groupsResponse = SysUtility.restGet(groupsURL, params, settings);
 				var groups = JSON.parse(groupsResponse);
-				out.println(groups);
-				if(groups != null && groups.hasOwnProperty('values')){
-					for (var i = 0; i < groups.values.length; i++) {
-						roles.push(groups.values[i].displayName);
+
+				if(groups != null && groups.hasOwnProperty('value')){
+					for (var i = 0; i < groups.value.length; i++) {
+						roles.push(groups.value[i].displayName);
 					}
 				}
-		out.println(roles);
 			}
 		} else {
 			if (accessTokenJSON.hasOwnProperty('error_description')) {
@@ -173,7 +150,8 @@ function waadSecurityProvider() {
 			resetPasswordURL: resetPasswordURL,
 			forgotPasswordURL: forgotPasswordURL,
 			userData: customDataHREF,
-			accessToken: accessToken,
+			accessToken : accessToken,
+            refreshToken : refreshToken,
 			lastLogin : {
 				datetime: null,
 				ipAddress : null
@@ -184,7 +162,7 @@ function waadSecurityProvider() {
 
  	//FUNCTION getRedirectURL to get the rediret URL from the currentUri
     result.getRedirectURL = function getRedirectURL(currentUri){
-		return redirectURL = SysUtility.getRedirectURL(currentUri);
+		return redirectURL = SysUtility.getRedirectURL(configSetup.tenantName,configSetup.clientId,configSetup.clientSecret,currentUri);
 	};
 
 	result.isAuthenticated = function isAuthenticated(url){
@@ -204,7 +182,7 @@ function waadSecurityProvider() {
 	};
 	//FUNCTION getGroupForUser
 	result.getGroupForUser = function getGroupForUser(identityProvider){
-
+		var roles = [];
 		var token = '';
 		var userPrincipalName = "";
 		var groupsURL = WAAD_GRAPHAPI_BASE_URL + '/' + configSetup.tenantName + '/users/'+identityProvider+'/memberOf?'+configSetup.apiVersion;
@@ -215,31 +193,35 @@ function waadSecurityProvider() {
 		var groupsResponse = SysUtility.restGet(groupsURL, params, settings);
 		var groups = JSON.parse(groupsResponse);
 		out.println(groups);
-		if(groups != null && groups.hasOwnProperty('values')){
-			for (var i = 0; i < groups.values.length; i++) {
-				roles.push(groups.values[i].displayName);
+		if(groups != null && groups.hasOwnProperty('value')){
+			for (var i = 0; i < groups.value.length; i++) {
+				roles.push(groups.value[i].displayName);
 			}
 		}
-		out.println(roles);
+		return roles;
 
 	};
     //FUNCTION getAllGroups is used to map all available groups for existing application - DO NOT CHANGE
     result.getAllGroups = function getAllGroups(payload) {
         var roles = [];
         var errorMsg = null;
-        var groupsURL = WAAD_GRAPHAPI_BASE_URL + '/' + configSetup.tenantName + '/groups/?'+configSetup.apiVersion;
+        var groupsURL = WAAD_GRAPHAPI_BASE_URL + '/' + configSetup.tenantName + '/groups?'+configSetup.apiVersion;
         var params = null;
-        var settings = {
-		             headers: { 'Authorization' : payload.accessToken }
-        		};
-
+		var accessToken = null;
+		if(payload.hasOwnProperty('accessToken')){
+			accessToken =  payload.accessToken;
+		}
         try {
+			var settings = {
+				headers: { 'Authorization' : accessToken }
+			};
+			//out.println(JSON.stringify(payload,null,2));
             var groupsResponse = SysUtility.restGet(groupsURL, params, settings);
             var groups = JSON.parse(groupsResponse);
-			out.println(JSON.stringify(groups, null, 2));
-			if(groups != null && groups.hasOwnProperty('values') ){
-				for (var i = 0; i < groups.values.length; i++) {
-					roles.push(groups.values[i].displayName);
+
+			if(groups != null && groups.hasOwnProperty('value') ){
+				for (var i = 0; i < groups.value.length; i++) {
+					roles.push(groups.value[i].displayName);
 				}
 			}
         }
@@ -260,12 +242,14 @@ function waadSecurityProvider() {
 		var redirectURL = null;
 		var autoLogin = false;
 		if(url != null && url.length > 1){
+
 			var urlArray = url.split("?");
+			var redirectURL = urlArray[0];
 			var codePart = urlArray[1].split("&");
 			//if(url contains accessToken then redirectURL will be extracted and returned){
 			var codeToken = codePart[0];//extract code= from user and remove the trailing stuff
 			var accessToken = (codeToken.split("="))[1]
-			var redirectURL = urlArray[0];
+
 			autoLogin = true;
 		}
 

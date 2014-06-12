@@ -25,8 +25,8 @@ var SysUtility = {
 		var result = waad.getAccessTokenFromURL(fullURL,redirectURL);
 		return result;
 	},
-	getRedirectURL : function getRedirectUrl(currentUri){
-		var waad = new com.espressologic.waad.authentication.WaadAuthentication();
+	getRedirectURL : function getRedirectUrl(tenantName, clientId, clientSecret,currentUri){
+		var waad = new com.espressologic.waad.authentication.WaadAuthentication(tenantName, clientId, clientSecret);
 		var result = waad.getRedirectUrl(currentUri);
 		return result;
 	}
@@ -58,7 +58,7 @@ var payload = {
 };
 
 
-var url = "http://localhost:8080/LiveBrowser/secure/aad";
+var baseUrl = "http://localhost:8080/LiveBrowser/secure/aad";
 //this function uses refresh token - but the Redirect URL is better
 //out.println("------------- testing getAccessToken");
 //result = waadSSO.getAccessToken(payload);
@@ -67,23 +67,41 @@ var url = "http://localhost:8080/LiveBrowser/secure/aad";
 
 
 out.println("------------- testing getRedirectURL");
-result = waadSSO.getRedirectURL(url);
-out.println(result);
+var redirectUrlResponse = waadSSO.getRedirectURL(baseUrl);
+out.println(redirectUrlResponse);
 out.println("-------------");
-payload.accessToken = result.accessToken;
 
-var fullURL = "http://localhost:8080/LiveBrowser/secure/aad?code=AwABAAAAvPM1KaPlrEqdFSBzjqfTGDPvkj4yz6UiB8EGe6bgV6xt6VdX5ViCaXLXQOxkAmQz3vfVSqPg17_Ly0ADiKOW265Z-TXPWBSMEwbGO9KRXeBL7ijpx2MA2bb0nOytfIczlO_4iMiF38R7xZI9j3CzergeQZ3c-1Zstp88uxOKZsqD1KD9CqYDF90wdvwkuOeKaZJGtFSwRbfiuJvrzLqsnKUavagRFGBBw-SJpyF3WDhorozTZqxvQoi3oFw8aDOuZIULVrBZjBp3BUZPGyIwMBG_nKwvuy-9iAhHkdANulT_4kUZhwXwFJL_APsml1hAdlsU_71u0Tmgl1b7RQDAIRspGYbHDcdhw9JNGgRPnbCaql-P7dlERCQedpaJKRNFgsEphZreYlm2me34XkQC-B2CPguzeLoBnNaabosBBhXf8F2sT3KqkW0GbnaMCz32ET_eUi6ghfJYz-8A7ufQtlLFrQu2EdMkTPmaF3BFdHOSm9LgfD4BHHGKIkzjqaKhzPKKoKvTDaYdZl4kfdbffEQdhEeBoaDEHajHlQu4bDUgAA&session_state=0cb13c93-3790-41c1-a464-d7fb3df8d0fc";
+
+var fullURL = "http://localhost:8080/LiveBrowser/secure/aad?code=AwABAAAAvPM1KaPlrEqdFSBzjqfTGDCDkpUUghNl5PnB2N-Fk0Y8gnvxptDj7CZKxkFth7dSehO-SjJoRch3IiSXihl6rlwjzrxTLwxCPVp_ep-NGPTvCEqV1mhmTBYf5LZR9hSskYropdmJ9OocJlVez-a9xADgG7_oFyED1LrS5dGrO_JCx0Frr6nXXrWg_Mz2nHImEpyd7Lg_ZoOkl3D9QZ_0-MGlwU1rgMBuVvU5WPxGip7nQFdJmP5APyl3SSrfw83KsEY2T-CMaNDer4KLqPSG9J-I3yLhvZXhQ97vgYBPOGHwnU3Rch8bD1dXr9FgHOmrXXdsbam82ynGkeI9ndJgpel_Jo76lwcI3PEvESjuPQq2nNSFNcFUCSgdHOyEdo39onKsFn-vZUd76dxCSbRRuaJR5HD-Ak9l634UCvtjZrRyVy8xljgel6DrPKu5F1bvD4gRskI3ijDAPYMatg9Lt2bfHf8YL_G2b6ZoJOJmMPAyooolE7Ed_zFp8kPKA8w9CqQP4zUpx1-u4kn2zfZ0RyolS5ARxRtA-Q-JJvQlRuogAA&session_state=ff78a658-ee39-46f1-8f9a-27de13a25a30";
 var redirectURL = "http://localhost:8080/LiveBrowser/secure/aad";
-
-
+var redirect = true;
+if(waadSSO.isAuthenticated(fullURL) && waadSSO.containsAuthenticationData(fullURL)){
+	out.println("------------- URL isAuthenticated  and  contains Authenticatd code values -------------");
+	redirect = false;
+}
 
 out.println("------------- testing getAccessTokenFromURL");
 result = waadSSO.getAccessTokenFromURL(fullURL,redirectURL);
 out.println(JSON.stringify(result, null, 2));
 //out.println("First field is " + result.fields[0].name);
 out.println("-------------");
-
-
+//use the access token to getGroup info and other webgraph API calls
+if(result.hasOwnProperty('accessToken') && result.accessToken != null){
+	payload = {
+		'accessToken' : result.accessToken,
+		'refreshToken' : null
+	};
+} else {
+	//we did not get back a valid response so need to logon again
+	redirect = true;
+}
+if(redirect){
+	var settings = {};
+	var parms = null;
+	out.println("-------------calling redirect GET to redirect");
+	result = SysUtility.restGet(redirectUrlResponse,parms,settings);
+	//out.println(result);
+}
 out.println("------------- testing getConfigInfo");
 result = waadSSO.getConfigInfo();
 out.println(JSON.stringify(result, null, 2));
@@ -110,6 +128,12 @@ out.println("-------------");
 
 out.println("------------- testing authenticate with containsAuthenticationData (s/b/ false) ");
 var result = waadSSO.containsAuthenticationData('http://localhost:8080/secure/aad');
+out.println(result);
+out.println("-------------");
+
+
+out.println("------------- testing authenticate with containsAuthenticationData Error (s/b/ false) ");
+var result = waadSSO.containsAuthenticationData('error no valid data');
 out.println(result);
 out.println("-------------");
 
