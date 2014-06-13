@@ -201,6 +201,11 @@ function waadSecurityProvider() {
 		return roles;
 
 	};
+	// FUNCTION findGroupInfoForUser using the current accessToken and userPrincipalName
+	result.findGroupInfoForUser = function findGroupInfoForUser(payload ,userPrincipalName){
+		var result = SysUtility.findGroupInfoForUser(configSetup.tenantName,configSetup.clientId,configSetup.clientSecret,payload.accessToken ,userPrincipalName);
+		return result;
+	};
     //FUNCTION getAllGroups is used to map all available groups for existing application - DO NOT CHANGE
     result.getAllGroups = function getAllGroups(payload) {
         var roles = [];
