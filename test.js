@@ -101,7 +101,7 @@ if(result != null && result.hasOwnProperty('accessToken') && result.accessToken 
 			'accessToken' : null,
 			'refreshToken' : null
 	};
-	result = waadSSO.getAccessToken(payload);
+	result = waadSSO.authenticate(payload);
 	out.println(JSON.stringify(result, null, 2));
 	if(result != null && result.hasOwnProperty('accessToken')){
 		payload = {

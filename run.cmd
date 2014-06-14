@@ -22,4 +22,5 @@ set cp=%cp%;target/lib/mail-1.4.7.jar
 set cp=%cp%;target/lib/rhino-1.7R4.jar
 set cp=%cp%;target/lib/slf4j-api-1.7.5.jar
 set cp=%cp%;target/lib/slf4j-log4j12-1.7.5.jar
-java -cp %cp% org.mozilla.javascript.tools.shell.Main test.js
+##java -cp %cp% org.mozilla.javascript.tools.shell.Main test.js
+java -cp %cp% org.mozilla.javascript.tools.shell.Main getLogonInfoTest.js

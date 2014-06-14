@@ -26,6 +26,21 @@ function waadSecurityProvider() {
    		configSetup.apiVersion = myConfig.apiVersion || "api-version=2013-11-08"
     };
 
+	result.isAuthenticated = function isAuthenticated(url){
+		var result = false;
+		if( url != null && (url.indexOf("code") > -1 || url.indexOf("id_token") > -1)){
+			result = true;
+		}
+		return result;
+	};
+
+	result.containsAuthenticationData = function containsAuthenticationData(url){
+		var result = false;
+		if( url != null && url.indexOf("error") <= -1 && (url.indexOf("code") > -1 || url.indexOf("id_token") > -1)){
+			result = true;
+		}
+		return result;
+	};
     // internal helper function to encode header values
     var createSettings = function (accesToken) {
         var params = null;
@@ -37,7 +52,7 @@ function waadSecurityProvider() {
 
     //NOTE: the function configure must be called first - this will validate the stormpath user account
     //FUNCTION AUTHENTICATE REQUIRES PAYLOAD {accessToken : '', refershToken : ''}
-    result.getAccessToken = function getAccessToken(payload) {
+    result.authenticate = function authenticate(payload) {
 
         var roles = [];
         var errorMsg = null;
@@ -65,7 +80,8 @@ function waadSecurityProvider() {
         			userId = userInfo.userId;
 					identityProvider = userInfo.identityProvider;
 					if(userId != null){
-						roles = getGroupForUser(userId);
+						payload.accessToken = accessToken;
+						roles = findGroupInfoForUser(payload,userId);
 					}
 			} else {
 				if (accessTokenJSON.hasOwnProperty('error_description')) {
@@ -117,23 +133,7 @@ function waadSecurityProvider() {
 			var userInfo = accessTokenJSON.userInfo;
 			userId = userInfo.userId;
 			identityProvider = userInfo.identityProvider;
-			if(userId != null){
-				//note: userId does not work - need to get ObjectId - but this does not come back in call - need another JSON call.
-				var groupsURL = WAAD_GRAPHAPI_BASE_URL + '/' + configSetup.tenantName + '/users/'+userId+'/memberOf?'+configSetup.apiVersion;
 
-				//var settings = createSettings(accessToken);
-				var settings = {
-		             headers: { 'Authorization' : accessToken }
-        		};
-				var groupsResponse = SysUtility.restGet(groupsURL, params, settings);
-				var groups = JSON.parse(groupsResponse);
-
-				if(groups != null && groups.hasOwnProperty('value')){
-					for (var i = 0; i < groups.value.length; i++) {
-						roles.push(groups.value[i].displayName);
-					}
-				}
-			}
 		} else {
 			if (accessTokenJSON.hasOwnProperty('error_description')) {
 				 errorMsg = "message: " + accessTokenJSON.error_description;
@@ -141,21 +141,12 @@ function waadSecurityProvider() {
 		}
 	 }catch (e) {
 		errorMsg = e.message;
-	}
+	 }
         var autResponse = {
 			errorMessage: errorMsg,
-			roleNames: roles,
 			userIdentifier: userId,
-			keyExpiration: new Date(+new Date() + (+configSetup.keyLifetimeMinutes) * 60 * 1000),
-			resetPasswordURL: resetPasswordURL,
-			forgotPasswordURL: forgotPasswordURL,
-			userData: customDataHREF,
 			accessToken : accessToken,
-            refreshToken : refreshToken,
-			lastLogin : {
-				datetime: null,
-				ipAddress : null
-			}
+            refreshToken : refreshToken
 		};
         return autResponse;
 	};
@@ -165,22 +156,7 @@ function waadSecurityProvider() {
 		return redirectURL = SysUtility.getRedirectURL(configSetup.tenantName,configSetup.clientId,configSetup.clientSecret,currentUri);
 	};
 
-	result.isAuthenticated = function isAuthenticated(url){
-		var result = false;
-		if( url != null && (url.indexOf("code") > -1 || url.indexOf("id_token") > -1)){
-			result = true;
-		}
-		return result;
-	};
-
-	result.containsAuthenticationData = function containsAuthenticationData(url){
-		var result = false;
-		if( url != null && url.indexOf("error") <= -1 && (url.indexOf("code") > -1 || url.indexOf("id_token") > -1)){
-			result = true;
-		}
-		return result;
-	};
-	//FUNCTION getGroupForUser
+	//FUNCTION getGroupForUser - make a REST call
 	result.getGroupForUser = function getGroupForUser(identityProvider){
 		var roles = [];
 		var token = '';
@@ -242,25 +218,59 @@ function waadSecurityProvider() {
         return autResponse;
     };
     //FUNCTION getLoginInfo is used to create the logon dialog - DO NOT CHANGE
+    //we pass in our app url - if it contains authentication code we use it to populate our dialog
     result.getLoginInfo = function getLoginInfo(url) {
-		var accessToken = "";//extract code= from user and remove the trailing stuff
-		var redirectURL = null;
+		var accessToken = null;
+		var refreshToken = null;
+		var error = null;
+		var redirectURL = {};
 		var autoLogin = false;
-		if(url != null && url.length > 1){
+		var name = "Microsoft Azure Active Directory";
+		var currentUri = url;
+		var userId = null;
+		var myRedirectURL = null;
 
-			var urlArray = url.split("?");
-			var redirectURL = urlArray[0];
-			var codePart = urlArray[1].split("&");
-			//if(url contains accessToken then redirectURL will be extracted and returned){
-			var codeToken = codePart[0];//extract code= from user and remove the trailing stuff
-			var accessToken = (codeToken.split("="))[1]
+		try{
+			if(url != null && url.length > 10 && url.indexOf("?") > -1 && url.indexOf("code") > -1){
 
-			autoLogin = true;
+				var urlArray = url.split("?");
+				currentUri = urlArray[0];
+				//var codePart = urlArray[1].split("&");
+				//if(url contains accessToken then redirectURL will be extracted and returned){
+				//var fullCode = codePart[0];//extract code= from user and remove the trailing stuff
+				//var accessToken = (fullCode.split("="))[1]
+				var result = SysUtility.getAccessTokenFromURL(configSetup.tenantName,configSetup.clientId,configSetup.clientSecret,url,currentUri);
+				var  accessTokenJSON = JSON.parse(result);
+				if (accessTokenJSON != null && accessTokenJSON.hasOwnProperty('accessToken')) {
+					accessToken =accessTokenJSON.accessToken;
+					refreshToken = accessTokenJSON.refreshToken;
+					var expiresOn = accessTokenJSON.expiresOn;
+					var userInfo = accessTokenJSON.userInfo;
+					userId = userInfo.userId;
+					currentUri = null;
+					autoLogin = true;
+				} else {
+					if (accessTokenJSON.hasOwnProperty('error_description')) {
+						 error = "message: " + accessTokenJSON.error_description;
+					}
+				}
+
+			}
+
+			if(currentUri != null){
+				var result = SysUtility.getRedirectURL(configSetup.tenantName,configSetup.clientId,configSetup.clientSecret,currentUri);
+				myRedirectURL = ""+result;
+			}
+			redirectURL = { "name" : name, "redirectURL" : myRedirectURL };
+			java.lang.System.out.println(redirectURL);
+		} catch(e){
+			error = e.message;
 		}
 
-        return {
+	  return {
 			redirectURL : redirectURL,
 			autoLogin : autoLogin,
+			errorMessage: error,
             fields: [
                 {
                     name: "accessToken",
@@ -272,12 +282,22 @@ function waadSecurityProvider() {
                     helpURL: "https://login.microsoftonline.com/login.srf"
                 },
                 {
-                    name: "redirectURL",
-                    display: "redirectURL",
-                    description: "Enter your redirectURL",
-                    type: "text",
-                    length: 80,
-                    helpURL: "https://login.microsoftonline.com/login.srf"
+					name: "refreshToken",
+					display: "refreshToken",
+					description: "Enter your refreshToken",
+					type: "text",
+					defaultValue: refreshToken,
+					length: 80,
+					helpURL: "https://login.microsoftonline.com/login.srf"
+                },
+                {
+					name: "userIdentity",
+					display: "user identity",
+					description: "Enter your user identity",
+					type: "text",
+					defaultValue: userId,
+					length: 80,
+					helpURL: "https://login.microsoftonline.com/login.srf"
                 }
             ],
             links : [
