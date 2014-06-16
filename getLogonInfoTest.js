@@ -62,7 +62,7 @@ var payload = {
 
 var baseUrl = "http://localhost:8080/LiveBrowser/";
 //this contains an expired code - so even though it looks good - it should force a redirect and relogon
-var fullURL = "http://localhost:8080/LiveBrowser/secure/aad?code=AwABAAAAvPM1KaPlrEqdFSBzjqfTGEhi4DAMImyCXZkXF2WTqR2JCS3KPuf4tq0E6HJrGvYvqC1FgBsIKO1gzSoSMBGMlCIr_K3Ml1VD3Q33oDWmitR6CJ34pi0gcr3OVKiFz61pg4RJyimC1VSWz2lVjJY3rXBv7I8kQbS_JDcCcgFOQ7J-sKJLAQgBuqzof2gNbB4iWq-vvu77q9snAhBwi8IjeYQWclgn-kQ-fg9acrzNIJbjlFrifvNUAn2dqqCRlNWEJout-VQaC3ApYNz_sfoYPGNThnxkPMXbuDMBvjAe81UX4YZcfLT6uV5KJ2mRcLkFbAJ22Oc2jnFbEvYUFzm0gvETmz5M8yTAelV6PXGaIY28DA5fGO7aR7mbuXVAmfxpaRTv4ZfsI0pCz95UcMi_foZSz5oylLy1xKAs608mPWxtGZDVwIBiQnBYAYIv3W_kLD_EprvTxJaAs2bVD7sUV3Rc6UDmReHZKuemsxY9x3OK9dN3eBoLgHDf_4hcR3tGkJtOdmJKl_-YA8f9Sv8Ft0D5_boN_4chl-7TT9ToBmkgAA&session_state=ed8b29a3-18b3-426b-bd91-00e664232094";
+var fullURL = "http://localhost:8080/LiveBrowser/secure/aad?code=AwABAAAAvPM1KaPlrEqdFSBzjqfTGFbYKnjtfR_9GFJ7XRd1s2KaAm5_vXDBon-vSqtd9jBGmcMjIutBQwjW8CzLWc5s17iYWHaMKSr8EPn1c7NN2PiEeJqEj32zx4-bKP8wXVb1Id1Xx0MZsqk2v6h5tNWJgdgXlsICejjavwfLpVrUsiLX0jwkhQlVqBRDplZQArj7IW07G41ycQsUfT4Y2yzEhxLzrt9FEVIybX_l-uU2QkfcLb6Ariuaz0cOYeUa8uwGuETNBDyO3d2lBO9vxA0PU6Ll_SbqmdUjmPNbH3ZObxzSJEwPw5CZYp9a9UnO0W0XJNa80rU4br4hKmiFwblcU198lOiOOiVZ2ad1kP87oHdSnIEkAPa1pvv44b3HeWk_VYISuQzosP6rbJH06BNnFFeQauzDd2b7_9N9nU19YKz1jjsSs7xQ-kuk1hsv7MfZ8NUg4tTnaBSi0LtSC0NL_Ron3Vs2Q9GBGj3zmFSlfddrcZtzebLdFW-ZIKN6b-d7SLH81k6mtE7cRXoKO6Jo_sbQGYu4QaMVlqmg1VW-rekgAA&session_state=f6a819e7-c67a-40a9-8b00-6a0f2d23e4da";
 var redirectURL = baseUrl + "secure/aad";
 
 out.println("------------- testing getLoginInfo(fullURL) should return autoLogon=true and a redirectURL{...} ");
@@ -70,9 +70,16 @@ out.println("------------- testing getLoginInfo(fullURL) should return autoLogon
 result = waadSSO.getLoginInfo(fullURL);
 out.println(JSON.stringify(result, null, 2));
 out.println("autoLogin field is " + result.autoLogin);
-out.println("Field field is " + result.fields[0].accessToken);
+out.println("Field field is " + result.fields[0].defaultValue);
 out.println("-------------");
 
+
+var payload = {
+    accessToken:  result.fields[0].defaultValue,
+    refreshToken:  result.fields[1].defaultValue
+};
+
+out.println(JSON.stringify(payload,null,2));
 
 var emptyURL = null;
 out.println("------------- testing getLoginInfo(null) should return autoLogon=false and a redirectURL{} ");
@@ -99,4 +106,12 @@ result = waadSSO.getLoginInfo(redirectURL);
 //out.println(JSON.stringify(result, null, 2));
 out.println("autoLogin field is " + result.autoLogin);
 out.println("Redirect field is " + JSON.stringify(result.redirectURL, null, 2));
+out.println("-------------");
+
+out.println("------------- testing authenticate ");
+//3) So now let us get our access token
+result = waadSSO.authenticate(payload);
+//out.println(stringify(result));
+out.println(JSON.stringify(result, null, 2));
+//out.println("autoLogin field is " + result.);
 out.println("-------------");
