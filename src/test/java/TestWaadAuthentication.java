@@ -18,10 +18,12 @@ public class TestWaadAuthentication {
 		TestWaadAuthentication test = new TestWaadAuthentication();
 		waad = new WaadAuthentication(tenantName, clientId, clientSecret);
 		try {
-			accessToken = test.testAccessToken();
-
+			test.initAccessToken();
+			test.getAccessToken();
 			test.testRedirectURL();
 			test.getAccessUsingURL();
+		
+			test.testFindGroupForUser("JoeDeveloper@tylerm007gmail.onmicrosoft.com");
 			test.testGroups();
 			test.testGroupInfo();
 		} catch (Exception ex) {
@@ -32,14 +34,28 @@ public class TestWaadAuthentication {
 
 	}
 
-	public String testAccessToken() throws Throwable {
+	
+	public String getAccessToken() throws Throwable {
+		
+		String result = waad.getAccessToken(refreshToken, tenantName , clientId, clientSecret);
+		System.out.println(result);
+		return result;
+	}
+	public void initAccessToken() throws Throwable {
 
 		String result = null;
 
 		String uri = "https://login.windows.net/20ce12a7-7cac-40bb-8dd1-49d1ab21c083";
 		AuthenticationResult authRes = waad.getAccessTokenResult(refreshToken, tenantName, clientId, clientSecret);
-		result = authRes.getAccessToken();
+		this.accessToken = authRes.getAccessToken();
 
+		System.out.println("Access Token Found "+this.accessToken);
+	}
+	
+	public String testFindGroupForUser(String userPrincipleName) throws Throwable{
+		
+		String result = waad.findGroupInfoForUser(accessToken, userPrincipleName);
+		System.out.println("testFindGroupForUser "+result);
 		return result;
 	}
 

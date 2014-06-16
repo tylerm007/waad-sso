@@ -78,10 +78,18 @@ function waadSecurityProvider() {
 			        var expiresOn = accessTokenJSON.expiresOn;
 			        var userInfo = accessTokenJSON.userInfo;
         			userId = userInfo.userId;
+        			java.lang.System.out.println(JSON.stringify(accessTokenJSON,null,2));
 					identityProvider = userInfo.identityProvider;
 					if(userId != null){
 						payload.accessToken = accessToken;
-						roles = findGroupInfoForUser(payload,userId);
+						var groupsResponse = SysUtility.findGroupInfoForUser(configSetup.tenantName,configSetup.clientId,configSetup.clientSecret,accessToken ,userId);
+
+						var groups = JSON.parse(groupsResponse);
+						if(groups != null && groups.hasOwnProperty('group') ){
+						for (var i = 0; i < groups.value.length; i++) {
+							roles.push(groups.value[i].group);
+						}
+			}
 					}
 			} else {
 				if (accessTokenJSON.hasOwnProperty('error_description')) {

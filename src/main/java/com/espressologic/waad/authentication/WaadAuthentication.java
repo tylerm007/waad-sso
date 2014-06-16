@@ -351,22 +351,22 @@ public class WaadAuthentication {
 		return sb.toString();
 	}
 
-	private void convertToJson(UserInfo result, StringBuffer sb) {
-		if (result != null) {
+	private void convertToJson(UserInfo user, StringBuffer sb) {
+		if (user != null) {
 			sb.append("{\n");
-			appendValues("userId", String.valueOf(result.getUserId()), sb, true);
+			appendValues("userId", String.valueOf(user.getUserId()), sb, true);
 			sb.append(",");
 			sb.append("\n");
 
-			appendValues("givenName", result.getGivenName(), sb, true);
+			appendValues("givenName", user.getGivenName(), sb, true);
 			sb.append(",");
 			sb.append("\n");
 
-			appendValues("familyName", result.getFamilyName(), sb, true);
+			appendValues("familyName", user.getFamilyName(), sb, true);
 			sb.append(",");
 			sb.append("\n");
 
-			appendValues("identityProvider", result.getIdentityProvider(), sb, true);
+			appendValues("identityProvider", user.getIdentityProvider(), sb, true);
 			sb.append("\n");
 			sb.append("\n}\n");
 		} else {

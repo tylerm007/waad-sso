@@ -84,7 +84,6 @@ if(waadSSO.isAuthenticated(fullURL) && waadSSO.containsAuthenticationData(fullUR
 out.println("------------- testing getAccessTokenFromURL--------------------------");
 //3) So now let us get our access token
 result = waadSSO.getAccessTokenFromURL(fullURL,redirectURL);
-out.println(JSON.stringify(result, null, 2));
 //out.println("First field is " + result.fields[0].name);
 out.println("-------------");
 //use the access token to getGroup info and other webgraph API calls
@@ -96,7 +95,7 @@ if(result != null && result.hasOwnProperty('accessToken') && result.accessToken 
 } else {
 	//we did not get back a valid response so need to logon again
 	//this function uses refresh token - but the Redirect URL is better
-	out.println("------------- did not have a valid token so we are now testing getAccessToken ----------------");
+	out.println("------------- did not have a valid token so we are now testing authenticate ----------------");
 	payload = {
 			'accessToken' : null,
 			'refreshToken' : null
@@ -108,7 +107,7 @@ if(result != null && result.hasOwnProperty('accessToken') && result.accessToken 
 				'accessToken' : result.accessToken,
 				'refreshToken' : result.refreshToken
 		};
-		out.println("getAccessToken acquired new token");
+		out.println("authenticate acquired new token");
 		redirect = false;
 	}
 	out.println("------------------------------------------------");
